@@ -1,6 +1,6 @@
 #!/bin/env sh
 for dir in day*; do
-        pushd $dir &&
+        cd $dir &&
         ./test &&
-        popd
+        cd ..
 done
