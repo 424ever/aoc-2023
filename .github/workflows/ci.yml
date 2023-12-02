@@ -17,6 +17,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install zig
-      run: snap install zig --classic --beta
+      run: sudo snap install zig --classic --beta
     - name: Run tests
       run: ./test.sh
