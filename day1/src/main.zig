@@ -107,7 +107,7 @@ test "part 1" {
     ;
     var stream = std.io.fixedBufferStream(lines);
     const reader = stream.reader();
-    const result: u16 = try part1(reader, std.testing.allocator);
+    const result = try part1(reader, std.testing.allocator);
     try expect(result == 142);
 }
 
