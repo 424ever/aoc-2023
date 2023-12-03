@@ -132,7 +132,7 @@ unsigned part1(unsigned int linec, const char **lines) {
 
 unsigned part2(unsigned linec, const char **lines) {
   unsigned curnum;
-  unsigned long long sum;
+  unsigned sum;
   unsigned prod;
   unsigned i, j;
   char c;
