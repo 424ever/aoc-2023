@@ -111,7 +111,7 @@ impl Bid {
             .cards
             .iter()
             .sorted()
-            .group_by(|c| c.clone())
+            .group_by(|c| *c)
             .into_iter()
             .map(|(ge0, group)| (ge0, group.count()))
             .collect();
@@ -134,7 +134,7 @@ impl Bid {
                 j_group_size = j_group.1;
             }
 
-            let mut longest_group = groups.last_mut().unwrap();
+            let longest_group = groups.last_mut().unwrap();
             if longest_group.0 != &Card::JJoker {
                 longest_group.1 += j_group_size;
                 groups.retain(|g| g.0 != &Card::JJoker);
