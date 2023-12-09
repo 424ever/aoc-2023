@@ -5,7 +5,7 @@ use std::{
     io::{BufRead, BufReader, ErrorKind},
 };
 
-use num::{integer::lcm, Integer};
+use num::Integer;
 
 struct Node {
     name: String,
