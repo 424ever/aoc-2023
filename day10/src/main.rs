@@ -2,6 +2,7 @@ use core::panic;
 use std::{
     collections::HashSet,
     env,
+    fmt::{Display, Write},
     fs::File,
     io::{BufRead, BufReader, ErrorKind},
 };
@@ -16,10 +17,11 @@ enum Direction {
     West,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Eq)]
 struct Tile {
     dir1: Option<Direction>,
     dir2: Option<Direction>,
+    print: char,
 }
 
 struct Map {
@@ -73,6 +75,12 @@ impl Tile {
     }
 }
 
+impl PartialEq for Tile {
+    fn eq(&self, other: &Self) -> bool {
+        self.dir1 == other.dir1 && self.dir2 == other.dir2
+    }
+}
+
 impl From<char> for Tile {
     fn from(value: char) -> Self {
         use Direction::*;
@@ -80,37 +88,51 @@ impl From<char> for Tile {
             '|' => Self {
                 dir1: Some(North),
                 dir2: Some(South),
+                print: '║',
             },
             '-' => Self {
                 dir1: Some(West),
                 dir2: Some(East),
+                print: '═',
             },
             'L' => Self {
                 dir1: Some(North),
                 dir2: Some(East),
+                print: '╚',
             },
             'J' => Self {
                 dir1: Some(North),
                 dir2: Some(West),
+                print: '╝',
             },
             '7' => Self {
                 dir1: Some(South),
                 dir2: Some(West),
+                print: '╗',
             },
             'F' => Self {
                 dir1: Some(South),
                 dir2: Some(East),
+                print: '╔',
             },
             '.' => Self {
                 dir1: None,
                 dir2: None,
+                print: '░',
             },
             'S' => Self {
                 dir1: None,
                 dir2: None,
+                print: '*',
             },
             _ => unreachable!("unknown char"),
         }
+    }
+}
+
+impl Display for Tile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_char(self.print)
     }
 }
 
@@ -173,6 +195,7 @@ impl Map {
                     tile = Tile {
                         dir1: Some(start_dirs[0]),
                         dir2: Some(start_dirs[1]),
+                        print: tile.print,
                     }
                 }
 
@@ -191,15 +214,15 @@ impl Map {
 
                 if inside_loop {
                     count += 1;
-                    print!("{}", char.to_string().green());
+                    print!("{}", tile.to_string().green());
                 } else if on_loop {
                     if counts_to_inter {
-                        print!("{}", char.to_string().blue().underline());
+                        print!("{}", tile.to_string().blue().underline());
                     } else {
-                        print!("{}", char.to_string().blue());
+                        print!("{}", tile.to_string().blue());
                     }
                 } else {
-                    print!("{}", char.to_string().red());
+                    print!("{}", tile.to_string().red());
                 }
             }
             println!()
