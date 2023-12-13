@@ -1,11 +1,17 @@
-use std::{env, fs::read_to_string, io::ErrorKind};
+use std::{
+    collections::HashSet,
+    env,
+    fs::read_to_string,
+    hash::{Hash, Hasher},
+    io::ErrorKind,
+};
 
 use colored::Colorize;
 use itertools::Itertools;
 
 use core::panic;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 struct Coord {
     row: usize,
     col: usize,
@@ -13,32 +19,19 @@ struct Coord {
 
 #[derive(Debug)]
 struct Universe {
-    tiles: Vec<Vec<Tile>>,
+    galaxies: HashSet<Galaxy>,
     width: usize,
+    height: usize,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct Galaxy {
     number: usize,
     coord: Coord,
 }
 
-struct Galaxies<'a> {
-    u: &'a Universe,
-    index: usize,
-    next_number: usize,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum Tile {
-    Empty,
-    Galaxy,
-    RepeatetEmpty(usize),
-}
-
 fn solve(u: &Universe) -> usize {
-    let galaxies: Vec<_> = u.galaxies().collect();
-    galaxies
+    u.galaxies
         .iter()
         .tuple_combinations()
         .map(|(c1, c2)| c1.coord.manhattan_dist(&c2.coord))
@@ -58,94 +51,78 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-impl<'a> Iterator for Galaxies<'a> {
-    type Item = Galaxy;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut res = None;
-
-        while let Some((ch, canskip)) = self.u.tile_at_index(self.index) {
-            self.index += canskip;
-            if ch == '#' {
-                res = Some(Galaxy {
-                    number: self.next_number,
-                    coord: self.u.index_to_coord(self.index - 1),
-                });
-                self.next_number += 1;
-                break;
-            }
-        }
-
-        res
-    }
-}
-
 impl Universe {
     fn new(input: String) -> Universe {
-        let mut tiles = vec![];
+        let mut galaxies = HashSet::new();
         let width = input.lines().nth(0).expect("No lines").len();
+        let mut galaxy_num: usize = 1;
 
-        for line in input.lines() {
-            let mut row = vec![];
+        for (row, line) in input.lines().enumerate() {
             if line.len() != width {
                 panic!("Different line lengths");
             }
-            for ch in line.chars() {
+            for (col, ch) in line.char_indices() {
                 if ch != '.' && ch != '#' {
                     panic!("Unexpected char");
                 }
-                if ch == '.' {
-                    row.push(Tile::Empty);
-                } else if ch == '#' {
-                    row.push(Tile::Galaxy);
+                if ch == '#' {
+                    galaxies.insert(Galaxy {
+                        number: galaxy_num,
+                        coord: Coord { row, col },
+                    });
+                    galaxy_num += 1;
                 }
             }
-            tiles.push(row);
         }
 
-        Self { tiles, width }
+        Self {
+            galaxies,
+            width,
+            height: input.lines().count(),
+        }
     }
 
     fn expanded(&self, replace_empty_with: usize) -> Universe {
-        let mut tiles = Vec::with_capacity(self.tiles.capacity());
-        let mut width = self.width();
+        let empty_rows: Vec<_> = (0..self.height())
+            .filter(|r| self.is_row_empty(*r))
+            .collect();
+        let empty_cols: Vec<_> = (0..self.width())
+            .filter(|c| self.is_col_empty(*c))
+            .collect();
 
-        for (idx, _) in self.tiles.iter().enumerate() {
-            let coord = self.index_to_coord(idx);
-            if self.is_col_empty(coord.col) {
-                if coord.row == 0 {
-                    width += replace_empty_with - 1;
-                }
-            }
+        fn count_empty_rows_below(empty_rows: &Vec<usize>, row: usize) -> usize {
+            empty_rows.iter().filter(|r| **r < row).count()
         }
 
-        for (row, r) in self.tiles.iter().enumerate() {
-            let mut rowvec = vec![];
-            if self.is_row_empty(row) {
-                rowvec.push(Tile::RepeatetEmpty(width));
-                for _ in 0..replace_empty_with {
-                    tiles.push(rowvec.clone());
-                }
-            } else {
-                for (col, t) in r.iter().enumerate() {
-                    if self.is_col_empty(col) {
-                        rowvec.push(Tile::RepeatetEmpty(replace_empty_with));
-                    } else {
-                        rowvec.push(t.clone());
-                    }
-                }
-                tiles.push(rowvec);
-            }
+        fn count_empty_cols_before(empty_cols: &Vec<usize>, col: usize) -> usize {
+            empty_cols.iter().filter(|c| **c < col).count()
         }
 
-        Self { tiles, width }
-    }
+        fn get_with_replacement(old: usize, count: usize, replacement: usize) -> usize {
+            (old - count) + (count * replacement)
+        }
 
-    fn galaxies(&self) -> Galaxies {
-        Galaxies {
-            u: self,
-            index: 0,
-            next_number: 1,
+        let galaxies = self
+            .galaxies
+            .iter()
+            .map(|g| {
+                let empty_rows = count_empty_rows_below(&empty_rows, g.coord.row);
+                let empty_cols = count_empty_cols_before(&empty_cols, g.coord.col);
+
+                let row = get_with_replacement(g.coord.row, empty_rows, replace_empty_with);
+                let col = get_with_replacement(g.coord.col, empty_cols, replace_empty_with);
+
+                Galaxy {
+                    number: g.number,
+                    coord: Coord { row, col },
+                }
+            })
+            .collect();
+
+        Self {
+            galaxies,
+            width: get_with_replacement(self.width(), empty_cols.len(), replace_empty_with),
+            height: get_with_replacement(self.height(), empty_rows.len(), replace_empty_with),
         }
     }
 
@@ -153,41 +130,13 @@ impl Universe {
         self.width
     }
 
-    fn index_to_coord(&self, index: usize) -> Coord {
-        Coord {
-            row: index / self.width(),
-            col: index % self.width(),
-        }
-    }
-
     fn height(&self) -> usize {
-        self.tiles.len()
-    }
-
-    fn tile_at(&self, coord: &Coord) -> Option<(char, usize)> {
-        let mut idx = 0;
-        for t in self.tiles.get(coord.row)? {
-            let clen = match t {
-                Tile::Empty => 1,
-                Tile::Galaxy => 1,
-                Tile::RepeatetEmpty(s) => *s,
-            };
-
-            if idx + clen > coord.col {
-                return Some((t.repr(), clen));
-            }
-            idx += clen;
-        }
-        return None;
-    }
-
-    fn tile_at_xy(&self, row: usize, col: usize) -> Option<char> {
-        Some(self.tile_at(&Coord { row, col })?.0)
+        self.height
     }
 
     fn is_row_empty(&self, row: usize) -> bool {
-        for i in 0..self.width() {
-            if self.tile_at_xy(row, i).unwrap() == '#' {
+        for g in self.galaxies.iter() {
+            if g.coord.row == row {
                 return false;
             }
         }
@@ -195,16 +144,12 @@ impl Universe {
     }
 
     fn is_col_empty(&self, col: usize) -> bool {
-        for row in 0..self.height() {
-            if self.tile_at_xy(row, col).unwrap() == '#' {
+        for g in self.galaxies.iter() {
+            if g.coord.col == col {
                 return false;
             }
         }
         return true;
-    }
-
-    fn tile_at_index(&self, index: usize) -> Option<(char, usize)> {
-        self.tile_at(&self.index_to_coord(index))
     }
 }
 
@@ -214,18 +159,16 @@ impl Coord {
     }
 }
 
-impl Tile {
-    fn repr(&self) -> char {
-        match self {
-            Tile::Empty => '.',
-            Tile::Galaxy => '#',
-            Tile::RepeatetEmpty(_) => '.',
-        }
+impl Hash for Galaxy {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.coord.hash(state);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use crate::{solve, Coord, Galaxy, Universe};
 
     #[test]
@@ -277,21 +220,25 @@ mod tests {
         let input = concat!("...#.\n", ".#...\n", "#....\n",);
         let u = Universe::new(input.to_string());
         assert_eq!(
-            u.galaxies().collect::<Vec<_>>(),
-            vec![
-                Galaxy {
-                    coord: Coord { row: 0, col: 3 },
-                    number: 1
-                },
-                Galaxy {
-                    coord: Coord { row: 1, col: 1 },
-                    number: 2
-                },
-                Galaxy {
-                    coord: Coord { row: 2, col: 0 },
-                    number: 3
-                },
-            ]
+            u.galaxies,
+            HashSet::from_iter(
+                vec![
+                    Galaxy {
+                        coord: Coord { row: 0, col: 3 },
+                        number: 1
+                    },
+                    Galaxy {
+                        coord: Coord { row: 1, col: 1 },
+                        number: 2
+                    },
+                    Galaxy {
+                        coord: Coord { row: 2, col: 0 },
+                        number: 3
+                    },
+                ]
+                .iter()
+                .cloned()
+            )
         )
     }
 
